@@ -78,3 +78,47 @@ export type BacktestRun = {
   sharpe: number | null
   efficacy_score: number | null
 }
+
+// ── Live sync types (from quantbot.db via quantbot_sync.py) ──
+
+export type QbAlert = {
+  id: number
+  ts: string
+  logged_at: string | null
+  symbol: string
+  direction: 'long' | 'short'
+  tier: 'GO' | 'WATCH' | 'SUPPRESSED' | string
+  score: number | null
+  price: number | null
+  vix: number | null
+  rvol: number | null
+  message: string | null
+  delivered: boolean
+  error: string | null
+  synced_at: string
+}
+
+export type QbTrade = {
+  id: number
+  opened_ts: string
+  symbol: string
+  direction: 'long' | 'short'
+  contract: string | null
+  strike: number | null
+  expiry: string | null
+  entry_underlying: number | null
+  entry_premium: number | null
+  delta: number | null
+  gamma: number | null
+  status: 'open' | 'closed' | string
+  trimmed_ts: string | null
+  target_ts: string | null
+  wall_warned_ts: string | null
+  closed_ts: string | null
+  close_reason: string | null
+  close_premium_pct: number | null
+  peak_premium_pct: number | null
+  contracts: number | null
+  risk_dollars: number | null
+  synced_at: string
+}

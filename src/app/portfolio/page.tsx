@@ -2,182 +2,449 @@
 
 import { useEffect, useState } from "react";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
 } from "recharts";
-import { supabase, type PaperTrade, type PortfolioSnapshot } from "@/lib/supabase";
+import { supabase, type QbTrade } from "@/lib/supabase";
 
 const STARTING = 40000;
 
-const STATIC_TRADES: PaperTrade[] = [
-  { id: "t1", strategy: "ORB 0DTE", ticker: "SPY", direction: "CALL", entry_price: 1.45, size_dollars: 145, contracts: 1, opened_at: "2026-09-02T09:45:00Z", closed_at: "2026-09-02T11:30:00Z", pnl_dollars: 290, pnl_pct: 2.0, status: "closed", exit_reason: "target" },
-  { id: "t2", strategy: "VWAP Reclaim", ticker: "QQQ", direction: "CALL", entry_price: 2.10, size_dollars: 210, contracts: 1, opened_at: "2026-09-04T10:15:00Z", closed_at: "2026-09-04T12:45:00Z", pnl_dollars: -105, pnl_pct: -0.5, status: "closed", exit_reason: "stop" },
-  { id: "t3", strategy: "ORB 0DTE", ticker: "SPY", direction: "PUT", entry_price: 1.85, size_dollars: 370, contracts: 2, opened_at: "2026-09-09T09:45:00Z", closed_at: "2026-09-09T10:50:00Z", pnl_dollars: 560, pnl_pct: 1.51, status: "closed", exit_reason: "target" },
-  { id: "t4", strategy: "GEX Flip", ticker: "SPY", direction: "CALL", entry_price: 3.20, size_dollars: 960, contracts: 3, opened_at: "2026-09-11T10:05:00Z", closed_at: "2026-09-11T13:15:00Z", pnl_dollars: 720, pnl_pct: 0.75, status: "closed", exit_reason: "target" },
-  { id: "t5", strategy: "EMA Cross 0DTE", ticker: "QQQ", direction: "PUT", entry_price: 2.45, size_dollars: 490, contracts: 2, opened_at: "2026-09-15T09:50:00Z", closed_at: "2026-09-15T10:30:00Z", pnl_dollars: -245, pnl_pct: -0.5, status: "closed", exit_reason: "stop" },
-  { id: "t6", strategy: "ORB 0DTE", ticker: "IWM", direction: "CALL", entry_price: 1.10, size_dollars: 110, contracts: 1, opened_at: "2026-09-18T09:45:00Z", closed_at: "2026-09-18T11:05:00Z", pnl_dollars: 220, pnl_pct: 2.0, status: "closed", exit_reason: "target" },
-  { id: "t7", strategy: "IV Skew Play", ticker: "SPY", direction: "PUT", entry_price: 4.50, size_dollars: 450, contracts: 1, opened_at: "2026-09-22T09:55:00Z", closed_at: "2026-09-22T14:00:00Z", pnl_dollars: 630, pnl_pct: 1.4, status: "closed", exit_reason: "target" },
-  { id: "t8", strategy: "News Filter", ticker: "QQQ", direction: "CALL", entry_price: 1.75, size_dollars: 175, contracts: 1, opened_at: "2026-09-25T10:05:00Z", closed_at: "2026-09-25T11:35:00Z", pnl_dollars: -88, pnl_pct: -0.5, status: "closed", exit_reason: "stop" },
-  { id: "t9", strategy: "VWAP Reclaim", ticker: "SPY", direction: "CALL", entry_price: 2.80, size_dollars: 840, contracts: 3, opened_at: "2026-09-29T10:20:00Z", closed_at: "2026-09-29T13:00:00Z", pnl_dollars: 1080, pnl_pct: 1.29, status: "closed", exit_reason: "target" },
-  { id: "t10", strategy: "GEX Flip", ticker: "SPY", direction: "PUT", entry_price: 3.60, size_dollars: 720, contracts: 2, opened_at: "2026-10-02T09:48:00Z", closed_at: "2026-10-02T11:10:00Z", pnl_dollars: 360, pnl_pct: 0.5, status: "closed", exit_reason: "target" },
-];
+/** P&L in dollars for a closed trade. Returns null for open trades. */
+function tradePnl(t: QbTrade): number | null {
+  if (
+    t.status !== "closed" ||
+    t.close_premium_pct == null ||
+    t.entry_premium == null ||
+    t.contracts == null
+  )
+    return null;
+  return (t.close_premium_pct / 100) * t.entry_premium * t.contracts * 100;
+}
 
-const STATIC_SNAPS: PortfolioSnapshot[] = (() => {
-  let b = STARTING;
-  return STATIC_TRADES.map((t, i) => {
-    b += t.pnl_dollars ?? 0;
-    return { id: String(i), snapshot_date: t.closed_at ?? t.opened_at, balance: Math.round(b), total_return_pct: ((b - STARTING) / STARTING) * 100, daily_pnl: t.pnl_dollars, win_rate: 0.6, profit_factor: 1.62, total_trades: i + 1 };
-  });
-})();
+function isWin(t: QbTrade): boolean {
+  const p = tradePnl(t);
+  return p != null && p > 0;
+}
 
-const fmt = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+const fmt = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-const Tooltip_ = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) => {
+const ChartTooltip = ({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ value: number }>;
+  label?: string;
+}) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-lg border border-[#262626] bg-[#161616] p-3 shadow-xl text-xs">
-      <p style={{ color: "var(--muted)" }} className="mb-1">{label}</p>
+      <p style={{ color: "var(--muted)" }} className="mb-1">
+        {label}
+      </p>
       <p className="font-bold text-white">${payload[0].value.toLocaleString()}</p>
     </div>
   );
 };
 
+function ReasonBadge({ reason }: { reason: string | null }) {
+  if (!reason) return <span className="pill pill-gray">—</span>;
+  if (reason === "target") return <span className="pill pill-green">Target</span>;
+  if (reason === "stop") return <span className="pill pill-red">Stopped</span>;
+  if (reason === "be_stop") return <span className="pill pill-yellow">BE Stop</span>;
+  return <span className="pill pill-gray">{reason}</span>;
+}
+
 export default function PortfolioPage() {
-  const [trades, setTrades] = useState<PaperTrade[]>(STATIC_TRADES);
-  const [snaps, setSnaps] = useState<PortfolioSnapshot[]>(STATIC_SNAPS);
+  const [trades, setTrades] = useState<QbTrade[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
-        const [tr, sr] = await Promise.all([
-          supabase.from("paper_trades").select("*").order("opened_at", { ascending: false }).limit(50),
-          supabase.from("portfolio_snapshots").select("*").order("snapshot_date", { ascending: true }).limit(30),
-        ]);
-        if (!tr.error && tr.data?.length) setTrades(tr.data);
-        if (!sr.error && sr.data?.length) setSnaps(sr.data);
-      } catch { /* use fallback */ }
-      finally { setLoading(false); }
+        const { data } = await supabase
+          .from("qb_trades")
+          .select("*")
+          .order("opened_ts", { ascending: false })
+          .limit(200);
+        if (data && data.length > 0) setTrades(data);
+      } catch {
+        /* stay empty */
+      } finally {
+        setLoading(false);
+      }
     })();
   }, []);
 
-  const bal = snaps.at(-1)?.balance ?? STARTING;
-  const pnl = bal - STARTING;
-  const pnlPct = (pnl / STARTING) * 100;
+  // Derive stats
   const closed = trades.filter((t) => t.status === "closed");
-  const wins = closed.filter((t) => (t.pnl_dollars ?? 0) > 0);
+  const open = trades.filter((t) => t.status === "open");
+  const wins = closed.filter(isWin);
   const wr = closed.length ? (wins.length / closed.length) * 100 : 0;
-  const peak = Math.max(...snaps.map((s) => s.balance), bal);
-  const dd = peak ? ((peak - bal) / peak) * 100 : 0;
+  const totalPnl = closed.reduce((sum, t) => sum + (tradePnl(t) ?? 0), 0);
+  const bal = STARTING + totalPnl;
+  const pnlPct = (totalPnl / STARTING) * 100;
 
+  // Equity curve: sorted by closed_ts, cumulative
+  const sortedClosed = [...closed]
+    .filter((t) => t.closed_ts)
+    .sort(
+      (a, b) => new Date(a.closed_ts!).getTime() - new Date(b.closed_ts!).getTime()
+    );
+  let running = STARTING;
   const chartData = [
     { date: "Start", balance: STARTING },
-    ...snaps.map((s) => ({ date: fmt(s.snapshot_date), balance: s.balance })),
+    ...sortedClosed.map((t) => {
+      running += tradePnl(t) ?? 0;
+      return { date: fmt(t.closed_ts!), balance: Math.round(running) };
+    }),
   ];
+
+  const peak = Math.max(...chartData.map((d) => d.balance), STARTING);
+  const dd = peak > STARTING ? ((peak - bal) / peak) * 100 : 0;
+
+  // Gross profit / gross loss for profit factor
+  const grossProfit = wins.reduce((s, t) => s + (tradePnl(t) ?? 0), 0);
+  const grossLoss = Math.abs(
+    closed.filter((t) => !isWin(t)).reduce((s, t) => s + (tradePnl(t) ?? 0), 0)
+  );
+  const pf = grossLoss > 0 ? grossProfit / grossLoss : null;
 
   return (
     <div>
       {/* Hero */}
       <div className="mb-8 pt-2">
-        <p className="text-sm mb-2" style={{ color: "var(--muted)" }}>Paper trading · started $40,000</p>
+        <p className="text-sm mb-2" style={{ color: "var(--muted)" }}>
+          Live trades · started $40,000
+        </p>
         <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-white leading-none">
-          {pnl >= 0 ? "Up and running." : "In drawdown."}
+          {loading ? "Loading…" : totalPnl >= 0 ? "Up and running." : "In drawdown."}
         </h1>
         <div className="mt-4 flex items-end gap-4 flex-wrap">
-          <span className="text-4xl sm:text-5xl font-bold tabular-nums" style={{ color: "var(--accent)" }}>
-            ${bal.toLocaleString()}
+          <span
+            className="text-4xl sm:text-5xl font-bold tabular-nums"
+            style={{ color: "var(--accent)" }}
+          >
+            ${bal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </span>
           <div className="flex items-center gap-2 mb-1">
-            <span className={`pill text-sm ${pnl >= 0 ? "pill-green" : "pill-red"}`}>
-              {pnl >= 0 ? "+" : ""}${pnl.toLocaleString()} ({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%)
+            <span
+              className={`pill text-sm ${totalPnl >= 0 ? "pill-green" : "pill-red"}`}
+            >
+              {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(0)} (
+              {pnlPct >= 0 ? "+" : ""}
+              {pnlPct.toFixed(1)}%)
             </span>
+            {open.length > 0 && (
+              <span className="pill pill-yellow text-sm">
+                {open.length} open
+              </span>
+            )}
           </div>
         </div>
         <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
-          Win rate {wr.toFixed(0)}% · {wins.length}W / {closed.length - wins.length}L · Drawdown {dd.toFixed(1)}%
+          Win rate {wr.toFixed(0)}% · {wins.length}W / {closed.length - wins.length}L
+          {pf != null && ` · PF ${pf.toFixed(2)}`}
+          {dd > 0.1 && ` · DD ${dd.toFixed(1)}%`}
         </p>
       </div>
 
       {/* Equity curve */}
-      <div className="card p-5 mb-6">
-        <p className="text-sm font-medium text-white mb-4">Equity Curve</p>
-        <div className="h-48 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 4, right: 0, bottom: 0, left: -20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1E1E1E" />
-              <XAxis dataKey="date" tick={{ fill: "#555", fontSize: 10 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: "#555", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} domain={["auto", "auto"]} />
-              <Tooltip content={<Tooltip_ />} />
-              <ReferenceLine y={STARTING} stroke="#333" strokeDasharray="4 4" />
-              <Line type="monotone" dataKey="balance" stroke="#A8FF3E" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: "#A8FF3E" }} />
-            </LineChart>
-          </ResponsiveContainer>
+      {chartData.length > 1 && (
+        <div className="card p-5 mb-6">
+          <p className="text-sm font-medium text-white mb-4">Equity Curve</p>
+          <div className="h-48 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={chartData}
+                margin={{ top: 4, right: 0, bottom: 0, left: -20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#1E1E1E" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fill: "#555", fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  tick={{ fill: "#555", fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+                  domain={["auto", "auto"]}
+                />
+                <Tooltip content={<ChartTooltip />} />
+                <ReferenceLine y={STARTING} stroke="#333" strokeDasharray="4 4" />
+                <Line
+                  type="monotone"
+                  dataKey="balance"
+                  stroke={totalPnl >= 0 ? "#A8FF3E" : "#FF4D4D"}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4, fill: "#A8FF3E" }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Trade ledger */}
+      {/* Open trades */}
+      {open.length > 0 && (
+        <div className="card overflow-hidden mb-6">
+          <div className="px-5 py-4 border-b border-[#1E1E1E]">
+            <h2 className="text-sm font-semibold text-white">
+              Open Positions{" "}
+              <span className="pill pill-yellow ml-2">{open.length} live</span>
+            </h2>
+          </div>
+          <div className="divide-y divide-[#1E1E1E]">
+            {open.map((t) => (
+              <div
+                key={t.id}
+                className="px-5 py-3 flex items-center justify-between"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-white">{t.symbol}</span>
+                    <span
+                      className={`pill ${
+                        t.direction === "long" ? "pill-green" : "pill-red"
+                      }`}
+                    >
+                      {t.direction === "long" ? "CALL" : "PUT"}
+                    </span>
+                    <span className="text-xs font-mono" style={{ color: "var(--muted)" }}>
+                      {t.contract ?? "—"}
+                    </span>
+                  </div>
+                  <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+                    {t.contracts}× @ ${t.entry_premium?.toFixed(2)} ·{" "}
+                    {fmt(t.opened_ts)}
+                    {t.trimmed_ts && " · ✂ trimmed"}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs" style={{ color: "var(--muted)" }}>Risk</p>
+                  <p className="text-sm font-semibold text-white">
+                    ${t.risk_dollars?.toFixed(0) ?? "—"}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Closed trade ledger */}
       <div className="card overflow-hidden">
         <div className="px-5 py-4 border-b border-[#1E1E1E] flex items-center justify-between">
           <h2 className="text-sm font-semibold text-white">Trade Ledger</h2>
-          <span className="text-xs" style={{ color: "var(--muted)" }}>{trades.length} trades{loading && " · syncing…"}</span>
+          <span className="text-xs" style={{ color: "var(--muted)" }}>
+            {closed.length} closed{loading && " · syncing…"}
+          </span>
         </div>
-        {/* Desktop */}
-        <div className="hidden sm:block overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[#1E1E1E]">
-                {["Date", "Ticker", "Strategy", "Dir", "×", "Entry", "P&L", "Result"].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left text-[10px] uppercase tracking-wider font-medium" style={{ color: "var(--muted)" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {trades.map((t) => {
-                const pos = (t.pnl_dollars ?? 0) > 0;
+
+        {/* Empty state */}
+        {trades.length === 0 && !loading && (
+          <div className="flex min-h-[20vh] items-center justify-center p-8">
+            <div className="text-center">
+              <p className="text-3xl mb-3">📊</p>
+              <p className="text-white">No trades synced yet.</p>
+              <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
+                Run `bash ~/.quantbot/install_sync.command` to backfill.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Desktop table */}
+        {closed.length > 0 && (
+          <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#1E1E1E]">
+                  {[
+                    "Date",
+                    "Symbol",
+                    "Dir",
+                    "Contract",
+                    "×",
+                    "Entry $",
+                    "Close %",
+                    "P&L",
+                    "Result",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      className="px-4 py-3 text-left text-[10px] uppercase tracking-wider font-medium"
+                      style={{ color: "var(--muted)" }}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...closed]
+                  .sort(
+                    (a, b) =>
+                      new Date(b.opened_ts).getTime() -
+                      new Date(a.opened_ts).getTime()
+                  )
+                  .map((t) => {
+                    const pnl = tradePnl(t);
+                    const pos = (pnl ?? 0) > 0;
+                    return (
+                      <tr
+                        key={t.id}
+                        className="border-b border-[#0D0D0D] hover:bg-[#161616] transition-colors"
+                      >
+                        <td
+                          className="px-4 py-3 text-xs"
+                          style={{ color: "var(--muted)" }}
+                        >
+                          {fmt(t.opened_ts)}
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-white">
+                          {t.symbol}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`pill ${
+                              t.direction === "long" ? "pill-green" : "pill-red"
+                            }`}
+                          >
+                            {t.direction === "long" ? "CALL" : "PUT"}
+                          </span>
+                        </td>
+                        <td
+                          className="px-4 py-3 text-xs font-mono max-w-[80px] truncate"
+                          style={{ color: "var(--muted)" }}
+                        >
+                          {t.contract ?? "—"}
+                        </td>
+                        <td className="px-4 py-3 text-white">{t.contracts}</td>
+                        <td className="px-4 py-3 font-mono text-white">
+                          ${t.entry_premium?.toFixed(2) ?? "—"}
+                        </td>
+                        <td
+                          className={`px-4 py-3 font-mono ${
+                            t.close_premium_pct != null
+                              ? t.close_premium_pct >= 0
+                                ? "text-[#A8FF3E]"
+                                : "text-[#FF4D4D]"
+                              : ""
+                          }`}
+                          style={
+                            t.close_premium_pct == null
+                              ? { color: "var(--muted)" }
+                              : {}
+                          }
+                        >
+                          {t.close_premium_pct != null
+                            ? `${t.close_premium_pct >= 0 ? "+" : ""}${t.close_premium_pct.toFixed(1)}%`
+                            : "—"}
+                        </td>
+                        <td
+                          className={`px-4 py-3 font-semibold ${
+                            pnl != null
+                              ? pos
+                                ? "text-[#A8FF3E]"
+                                : "text-[#FF4D4D]"
+                              : ""
+                          }`}
+                          style={pnl == null ? { color: "var(--muted)" } : {}}
+                        >
+                          {pnl != null
+                            ? `${pos ? "+" : ""}$${Math.abs(pnl).toFixed(0)}`
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <ReasonBadge reason={t.close_reason} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Mobile list */}
+        {closed.length > 0 && (
+          <div className="sm:hidden divide-y divide-[#1E1E1E]">
+            {[...closed]
+              .sort(
+                (a, b) =>
+                  new Date(b.opened_ts).getTime() -
+                  new Date(a.opened_ts).getTime()
+              )
+              .map((t) => {
+                const pnl = tradePnl(t);
+                const pos = (pnl ?? 0) > 0;
                 return (
-                  <tr key={t.id} className="border-b border-[#0D0D0D] hover:bg-[#161616] transition-colors">
-                    <td className="px-4 py-3 text-xs" style={{ color: "var(--muted)" }}>{fmt(t.opened_at)}</td>
-                    <td className="px-4 py-3 font-semibold text-white">{t.ticker}</td>
-                    <td className="px-4 py-3 text-xs truncate max-w-[90px]" style={{ color: "var(--muted)" }}>{t.strategy}</td>
-                    <td className="px-4 py-3">
-                      <span className={`pill ${t.direction === "CALL" ? "pill-green" : "pill-red"}`}>{t.direction}</span>
-                    </td>
-                    <td className="px-4 py-3 text-white">{t.contracts}</td>
-                    <td className="px-4 py-3 font-mono text-white">${t.entry_price.toFixed(2)}</td>
-                    <td className={`px-4 py-3 font-semibold ${pos ? "text-[#A8FF3E]" : "text-[#FF4D4D]"}`}>
-                      {t.pnl_dollars != null ? `${pos ? "+" : ""}$${t.pnl_dollars.toFixed(0)}` : "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`pill ${pos ? "pill-green" : "pill-red"}`}>
-                        {t.exit_reason === "target" ? "Target" : t.exit_reason === "stop" ? "Stopped" : t.status}
-                      </span>
-                    </td>
-                  </tr>
+                  <div
+                    key={t.id}
+                    className="px-4 py-3 flex items-center justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-white">{t.symbol}</span>
+                        <span
+                          className={`pill ${
+                            t.direction === "long" ? "pill-green" : "pill-red"
+                          }`}
+                        >
+                          {t.direction === "long" ? "CALL" : "PUT"}
+                        </span>
+                        <span className="text-xs" style={{ color: "var(--muted)" }}>
+                          {t.contracts}×
+                        </span>
+                      </div>
+                      <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+                        {t.close_reason ?? "—"} · {fmt(t.opened_ts)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p
+                        className={`text-sm font-bold ${
+                          pnl != null
+                            ? pos
+                              ? "text-[#A8FF3E]"
+                              : "text-[#FF4D4D]"
+                            : ""
+                        }`}
+                        style={pnl == null ? { color: "var(--muted)" } : {}}
+                      >
+                        {pnl != null
+                          ? `${pos ? "+" : ""}$${Math.abs(pnl).toFixed(0)}`
+                          : "—"}
+                      </p>
+                      {t.close_premium_pct != null && (
+                        <p
+                          className="text-[10px]"
+                          style={{ color: "var(--muted)" }}
+                        >
+                          {t.close_premium_pct >= 0 ? "+" : ""}
+                          {t.close_premium_pct.toFixed(1)}%
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-        {/* Mobile */}
-        <div className="sm:hidden divide-y divide-[#1E1E1E]">
-          {trades.map((t) => {
-            const pos = (t.pnl_dollars ?? 0) > 0;
-            return (
-              <div key={t.id} className="px-4 py-3 flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-white">{t.ticker}</span>
-                    <span className={`pill ${t.direction === "CALL" ? "pill-green" : "pill-red"}`}>{t.direction}</span>
-                    <span className="text-xs" style={{ color: "var(--muted)" }}>{t.contracts}×</span>
-                  </div>
-                  <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>{t.strategy} · {fmt(t.opened_at)}</p>
-                </div>
-                <span className={`text-sm font-bold ${pos ? "text-[#A8FF3E]" : "text-[#FF4D4D]"}`}>
-                  {t.pnl_dollars != null ? `${pos ? "+" : ""}$${t.pnl_dollars.toFixed(0)}` : "—"}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

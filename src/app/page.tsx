@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase, type Strategy, type PortfolioSnapshot } from "@/lib/supabase";
+import { supabase, type Strategy, type QbTrade } from "@/lib/supabase";
 
-// Mini sparkline SVG — generates a tiny area chart from data points
+// Mini sparkline SVG
 function Sparkline({
   points,
   positive = true,
@@ -26,12 +26,19 @@ function Sparkline({
     height - ((p - min) / range) * height * 0.85 - height * 0.05,
   ]);
 
-  const pathD = coords.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const pathD = coords
+    .map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`)
+    .join(" ");
   const areaD = `${pathD} L${width},${height} L0,${height} Z`;
   const color = positive ? "#A8FF3E" : "#FF4D4D";
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} preserveAspectRatio="none">
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      width="100%"
+      height={height}
+      preserveAspectRatio="none"
+    >
       <defs>
         <linearGradient id={`grad-${positive}`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity="0.25" />
@@ -44,7 +51,6 @@ function Sparkline({
   );
 }
 
-// Generate a fake-but-believable equity curve for a strategy
 function makeSparkPoints(winRate: number, trades: number): number[] {
   const n = Math.min(trades, 20);
   let val = 40000;
@@ -78,50 +84,73 @@ function StrategyCard({ s }: { s: Strategy }) {
 
   return (
     <div className="card p-0 overflow-hidden">
-      {/* Sparkline fills top */}
       <div className="relative h-16 bg-[#0D0D0D]">
         <Sparkline points={sparkPoints} positive={positive} height={64} width={300} />
-        {/* % badge top-right */}
-        <span className={`absolute top-2 right-3 ${positive ? "pill pill-green" : "pill pill-red"}`}>
-          {positive ? "+" : ""}{returnPct.toFixed(1)}%
+        <span
+          className={`absolute top-2 right-3 ${
+            positive ? "pill pill-green" : "pill pill-red"
+          }`}
+        >
+          {positive ? "+" : ""}
+          {returnPct.toFixed(1)}%
         </span>
       </div>
-
-      {/* Card body */}
       <div className="p-4">
         <div className="flex items-start justify-between mb-3">
           <div>
-            <p className="font-semibold text-white text-sm leading-tight">{s.display_name}</p>
-            <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>{s.name}</p>
+            <p className="font-semibold text-white text-sm leading-tight">
+              {s.display_name}
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+              {s.name}
+            </p>
           </div>
           <span className={STATUS_PILL[s.status] ?? "pill pill-gray"}>{s.status}</span>
         </div>
-
         <div className="grid grid-cols-3 gap-2">
           <div>
-            <p className="text-[10px] uppercase tracking-wider" style={{ color: "var(--muted)" }}>Balance</p>
-            <p className="text-sm font-bold text-white mt-0.5">${(balance / 1000).toFixed(1)}k</p>
+            <p
+              className="text-[10px] uppercase tracking-wider"
+              style={{ color: "var(--muted)" }}
+            >
+              Balance
+            </p>
+            <p className="text-sm font-bold text-white mt-0.5">
+              ${(balance / 1000).toFixed(1)}k
+            </p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-wider" style={{ color: "var(--muted)" }}>Win Rate</p>
+            <p
+              className="text-[10px] uppercase tracking-wider"
+              style={{ color: "var(--muted)" }}
+            >
+              Win Rate
+            </p>
             <p className="text-sm font-bold text-white mt-0.5">
               {s.win_rate != null ? `${(s.win_rate * 100).toFixed(0)}%` : "—"}
             </p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-wider" style={{ color: "var(--muted)" }}>PF</p>
+            <p
+              className="text-[10px] uppercase tracking-wider"
+              style={{ color: "var(--muted)" }}
+            >
+              PF
+            </p>
             <p className="text-sm font-bold text-white mt-0.5">
               {s.profit_factor?.toFixed(2) ?? "—"}
             </p>
           </div>
         </div>
-
         <div className="mt-3 flex items-center gap-1.5 border-t border-[#1E1E1E] pt-3">
           <span
             className="h-1.5 w-1.5 rounded-full"
             style={{ background: HEALTH_COLOR[s.health_label] ?? "#666" }}
           />
-          <span className="text-xs font-medium" style={{ color: HEALTH_COLOR[s.health_label] ?? "#666" }}>
+          <span
+            className="text-xs font-medium"
+            style={{ color: HEALTH_COLOR[s.health_label] ?? "#666" }}
+          >
             {s.health_label}
           </span>
           <span className="ml-auto text-xs" style={{ color: "var(--muted)" }}>
@@ -133,7 +162,6 @@ function StrategyCard({ s }: { s: Strategy }) {
   );
 }
 
-// Static fallback strategies for when Supabase isn't configured
 const FALLBACK_STRATEGIES: Strategy[] = [
   { id: "1", name: "orb_0dte", display_name: "ORB 0DTE", params: {}, efficacy_score: 78, win_rate: 0.65, profit_factor: 1.8, total_trades: 248, virtual_balance: 44200, last_updated: new Date().toISOString(), status: "active", consecutive_losses: 0, health_label: "Strong" },
   { id: "2", name: "vwap_reclaim", display_name: "VWAP Reclaim", params: {}, efficacy_score: 71, win_rate: 0.60, profit_factor: 1.6, total_trades: 192, virtual_balance: 43200, last_updated: new Date().toISOString(), status: "active", consecutive_losses: 1, health_label: "Strong" },
@@ -143,37 +171,49 @@ const FALLBACK_STRATEGIES: Strategy[] = [
   { id: "6", name: "news_filter_momentum", display_name: "News Filter Momentum", params: {}, efficacy_score: 61, win_rate: 0.57, profit_factor: 1.45, total_trades: 112, virtual_balance: 41600, last_updated: new Date().toISOString(), status: "active", consecutive_losses: 0, health_label: "Steady" },
 ];
 
-const FALLBACK_SNAPSHOT: PortfolioSnapshot = {
-  id: "1",
-  snapshot_date: new Date().toISOString(),
-  balance: 42800,
-  total_return_pct: 7.0,
-  daily_pnl: 360,
-  win_rate: 0.6,
-  profit_factor: 1.62,
-  total_trades: 10,
-};
+function tradePnl(t: QbTrade): number | null {
+  if (
+    t.status !== "closed" ||
+    t.close_premium_pct == null ||
+    t.entry_premium == null ||
+    t.contracts == null
+  )
+    return null;
+  return (t.close_premium_pct / 100) * t.entry_premium * t.contracts * 100;
+}
 
 export default function HomePage() {
   const [strategies, setStrategies] = useState<Strategy[]>(FALLBACK_STRATEGIES);
-  const [snapshot, setSnapshot] = useState<PortfolioSnapshot>(FALLBACK_SNAPSHOT);
+  const [trades, setTrades] = useState<QbTrade[]>([]);
+  const [alertCount, setAlertCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       try {
-        const [stratResult, snapResult] = await Promise.all([
+        const [stratResult, tradeResult, alertResult] = await Promise.all([
           supabase.from("strategies").select("*").order("name"),
-          supabase.from("portfolio_snapshots").select("*").order("snapshot_date", { ascending: false }).limit(1).maybeSingle(),
+          supabase
+            .from("qb_trades")
+            .select("*")
+            .order("opened_ts", { ascending: false })
+            .limit(200),
+          supabase
+            .from("qb_alerts")
+            .select("id", { count: "exact", head: true }),
         ]);
-        if (!stratResult.error && stratResult.data && stratResult.data.length > 0) {
+
+        if (!stratResult.error && stratResult.data?.length) {
           setStrategies(stratResult.data);
         }
-        if (!snapResult.error && snapResult.data) {
-          setSnapshot(snapResult.data);
+        if (!tradeResult.error && tradeResult.data?.length) {
+          setTrades(tradeResult.data);
+        }
+        if (!alertResult.error) {
+          setAlertCount(alertResult.count ?? null);
         }
       } catch {
-        // keep fallback data
+        // keep fallbacks
       } finally {
         setLoading(false);
       }
@@ -181,51 +221,102 @@ export default function HomePage() {
     load();
   }, []);
 
-  const returnPct = snapshot.total_return_pct ?? 7.0;
-  const returnPositive = returnPct >= 0;
-  const pnlPositive = (snapshot.daily_pnl ?? 0) >= 0;
+  // Live stats from qb_trades
+  const closed = trades.filter((t) => t.status === "closed");
+  const open = trades.filter((t) => t.status === "open");
+  const totalPnl = closed.reduce((sum, t) => sum + (tradePnl(t) ?? 0), 0);
+  const bal = 40000 + totalPnl;
+  const pnlPct = (totalPnl / 40000) * 100;
+  const wins = closed.filter((t) => (tradePnl(t) ?? 0) > 0);
+  const wr = closed.length ? (wins.length / closed.length) * 100 : null;
+
+  // Today's P&L
+  const todayStr = new Date().toDateString();
+  const todayPnl = closed
+    .filter((t) => t.closed_ts && new Date(t.closed_ts).toDateString() === todayStr)
+    .reduce((sum, t) => sum + (tradePnl(t) ?? 0), 0);
+
+  const hasLiveData = trades.length > 0;
   const activeCount = strategies.filter((s) => s.status === "active").length;
+
+  const returnPositive = hasLiveData ? totalPnl >= 0 : true;
+  const pnlPositive = todayPnl >= 0;
 
   return (
     <div>
-      {/* ── Hero section ── */}
+      {/* Hero */}
       <div className="mb-8 pt-2">
         <p className="text-sm mb-2" style={{ color: "var(--muted)" }}>
-          Paper portfolio · {activeCount} strategies running
+          {hasLiveData
+            ? `${trades.length} trades tracked · ${alertCount != null ? `${alertCount} alerts fired` : ""}`
+            : `Paper portfolio · ${activeCount} strategies running`}
         </p>
         <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-white leading-none">
-          {returnPositive ? "Looking good." : "Needs attention."}
+          {loading
+            ? "Loading…"
+            : returnPositive
+            ? "Looking good."
+            : "Needs attention."}
         </h1>
         <div className="mt-4 flex items-end gap-4 flex-wrap">
-          <span className="text-4xl sm:text-5xl font-bold tabular-nums" style={{ color: "var(--accent)" }}>
-            ${snapshot.balance.toLocaleString()}
+          <span
+            className="text-4xl sm:text-5xl font-bold tabular-nums"
+            style={{ color: "var(--accent)" }}
+          >
+            ${bal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </span>
-          <div className="flex items-center gap-3 mb-1">
-            <span className={`pill text-sm ${returnPositive ? "pill-green" : "pill-red"}`}>
-              {returnPositive ? "+" : ""}{returnPct.toFixed(1)}% all-time
-            </span>
-            <span className={`pill text-sm ${pnlPositive ? "pill-green" : "pill-red"}`}>
-              {pnlPositive ? "+" : ""}${snapshot.daily_pnl?.toFixed(0)} today
-            </span>
+          <div className="flex items-center gap-3 mb-1 flex-wrap">
+            {hasLiveData && (
+              <span
+                className={`pill text-sm ${
+                  returnPositive ? "pill-green" : "pill-red"
+                }`}
+              >
+                {returnPositive ? "+" : ""}
+                {pnlPct.toFixed(1)}% all-time
+              </span>
+            )}
+            {todayPnl !== 0 && (
+              <span
+                className={`pill text-sm ${pnlPositive ? "pill-green" : "pill-red"}`}
+              >
+                {pnlPositive ? "+" : ""}${todayPnl.toFixed(0)} today
+              </span>
+            )}
+            {open.length > 0 && (
+              <span className="pill pill-yellow text-sm">
+                {open.length} open
+              </span>
+            )}
           </div>
         </div>
-        <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
-          Win rate {((snapshot.win_rate ?? 0.6) * 100).toFixed(0)}% · PF {(snapshot.profit_factor ?? 1.62).toFixed(2)} · {snapshot.total_trades ?? 10} trades
-        </p>
+        {hasLiveData ? (
+          <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
+            {wr != null && `Win rate ${wr.toFixed(0)}% · `}
+            {wins.length}W / {closed.length - wins.length}L · {closed.length} closed trades
+          </p>
+        ) : (
+          <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
+            Sync running · run `bash ~/.quantbot/install_sync.command`
+          </p>
+        )}
       </div>
 
-      {/* ── Section header ── */}
+      {/* Section header */}
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-white">Strategies</h2>
         {loading && (
-          <span className="flex items-center gap-1.5 text-xs" style={{ color: "var(--muted)" }}>
+          <span
+            className="flex items-center gap-1.5 text-xs"
+            style={{ color: "var(--muted)" }}
+          >
             <span className="h-3 w-3 animate-spin rounded-full border border-[#333] border-t-[#A8FF3E]" />
             Syncing
           </span>
         )}
       </div>
 
-      {/* ── Strategy cards ── */}
+      {/* Strategy cards */}
       <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         {strategies.map((s) => (
           <StrategyCard key={s.id} s={s} />
