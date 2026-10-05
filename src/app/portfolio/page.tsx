@@ -15,6 +15,10 @@ import { supabase, type QbTrade } from "@/lib/supabase";
 
 const STARTING = 40000;
 
+// Cap close_premium_pct at ±500% — values beyond this are data errors
+// (e.g. illiquid EOD option prints that don't reflect a real fill).
+const MAX_PCT = 500;
+
 /** P&L in dollars for a closed trade. Returns null for open trades. */
 function tradePnl(t: QbTrade): number | null {
   if (
@@ -24,7 +28,13 @@ function tradePnl(t: QbTrade): number | null {
     t.contracts == null
   )
     return null;
-  return (t.close_premium_pct / 100) * t.entry_premium * t.contracts * 100;
+  const pct = Math.max(-MAX_PCT, Math.min(MAX_PCT, t.close_premium_pct));
+  return (pct / 100) * t.entry_premium * t.contracts * 100;
+}
+
+/** True if this trade's close_pct was capped (data likely unreliable). */
+function isCapped(t: QbTrade): boolean {
+  return t.close_premium_pct != null && Math.abs(t.close_premium_pct) > MAX_PCT;
 }
 
 function isWin(t: QbTrade): boolean {
@@ -352,7 +362,7 @@ export default function PortfolioPage() {
                           }
                         >
                           {t.close_premium_pct != null
-                            ? `${t.close_premium_pct >= 0 ? "+" : ""}${t.close_premium_pct.toFixed(1)}%`
+                            ? `${t.close_premium_pct >= 0 ? "+" : ""}${t.close_premium_pct.toFixed(1)}%${isCapped(t) ? " ⚠" : ""}`
                             : "—"}
                         </td>
                         <td

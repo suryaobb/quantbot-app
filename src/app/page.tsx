@@ -179,7 +179,8 @@ function tradePnl(t: QbTrade): number | null {
     t.contracts == null
   )
     return null;
-  return (t.close_premium_pct / 100) * t.entry_premium * t.contracts * 100;
+  const pct = Math.max(-500, Math.min(500, t.close_premium_pct));
+  return (pct / 100) * t.entry_premium * t.contracts * 100;
 }
 
 export default function HomePage() {
