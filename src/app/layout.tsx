@@ -21,6 +21,7 @@ const NAV_LINKS = [
   { href: "/brain", label: "Brain" },
   { href: "/backtests", label: "Backtests" },
   { href: "/portfolio", label: "Portfolio" },
+  { href: "/agent", label: "⚡ Agent" },
 ];
 
 const BOTTOM_LINKS = [
@@ -49,6 +50,12 @@ const BOTTOM_LINKS = [
     <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" viewBox="0 0 24 24">
       <rect x="2" y="7" width="20" height="14" rx="2"/>
       <path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/>
+    </svg>
+  )},
+  { href: "/agent", label: "Agent", icon: (
+    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" viewBox="0 0 24 24">
+      <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+      <path d="M17 3l1.5 1.5M19 7h2M17 11l1.5-1.5" strokeLinecap="round"/>
     </svg>
   )},
 ];
