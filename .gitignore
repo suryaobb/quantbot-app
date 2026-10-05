@@ -1,0 +1,14 @@
+/node_modules
+/.next/
+/out/
+.DS_Store
+.env*.local
+.env
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+
+# Local deploy scripts (contain credentials)
+deploy_now.sh
+deploy_now.command
+setup.sh
